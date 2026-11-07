@@ -1,0 +1,52 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isTeacher() {
+      return request.auth != null && request.auth.token.email in ['alabdulhay.naif@gmail.com','kholoud.a.sharaf.2013@gmail.com'];
+    }
+    function optStr(d, k, max) {
+      return !(k in d) || (d[k] is string && d[k].size() <= max);
+    }
+
+    // wall posts (students + parents)
+    match /thq1_wall/{id} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['name','type','at','n','text','approved','student','pledge'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60
+        && request.resource.data.type in ['text','card','draw','voice','photo','parent']
+        && request.resource.data.approved == true
+        && optStr(request.resource.data, 'text', 400)
+        && optStr(request.resource.data, 'student', 60);
+      allow update, delete: if isTeacher();
+    }
+
+    // drawings, photos and voice notes attached to a wall post
+    match /thq1_media/{id} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['data'])
+        && request.resource.data.data is string
+        && request.resource.data.data.size() < 900000;
+      allow delete: if isTeacher();
+    }
+
+    // post-survey answers (only the teacher can read them)
+    match /thq1_survey/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['name','ans','rating','score','at'])
+        && request.resource.data.ans is list && request.resource.data.ans.size() == 15;
+      allow read, delete: if isTeacher();
+    }
+
+    // prayer counter: can only go up, at most 50 at a time
+    match /stats/thq1_main {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['prayers'])
+        && request.resource.data.prayers is int && request.resource.data.prayers <= 50;
+      allow update: if request.resource.data.keys().hasOnly(['prayers'])
+        && request.resource.data.prayers is int
+        && request.resource.data.prayers > resource.data.prayers
+        && request.resource.data.prayers <= resource.data.prayers + 50;
+    }
+  }
+}
